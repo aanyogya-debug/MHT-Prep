@@ -14,6 +14,12 @@ interface SessionOption {
   text: string;
 }
 
+interface SessionPassage {
+  id: string;
+  title: string;
+  content: string;
+}
+
 interface SessionItem {
   id: string;
   orderIndex: number;
@@ -24,6 +30,7 @@ interface SessionItem {
     questionText: string;
     imageUrl: string | null;
     options: SessionOption[];
+    passage: SessionPassage | null;
   };
 }
 
@@ -185,57 +192,73 @@ export default function SessionPage() {
         ))}
       </div>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 p-6">
+      <main
+        className={cn(
+          "mx-auto w-full flex-1 p-6",
+          current?.question.passage ? "max-w-5xl" : "max-w-2xl",
+        )}
+      >
         {current && (
-          <>
-            <p className="mb-2 text-sm text-muted-foreground">
-              Soal {currentIndex + 1} dari {items.length}
-            </p>
-            <MarkdownContent content={current.question.questionText} />
-            {current.question.imageUrl && (
-              // eslint-disable-next-line @next/next/no-img-element -- URL Cloudinary eksternal, domain belum dikonfigurasi utk next/image
-              <img
-                src={current.question.imageUrl}
-                alt="Gambar soal"
-                className="my-4 max-w-full rounded-lg border"
-              />
+          <div className={current.question.passage ? "grid gap-6 md:grid-cols-2" : undefined}>
+            {current.question.passage && (
+              <div className="rounded-lg border p-4 md:sticky md:top-20 md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
+                <p className="mb-2 text-sm font-medium text-muted-foreground">
+                  {current.question.passage.title}
+                </p>
+                <MarkdownContent content={current.question.passage.content} />
+              </div>
             )}
-            <div className="mt-6 flex flex-col gap-2">
-              {current.question.options.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => selectOption(current.question.id, option.id)}
-                  className={cn(
-                    "flex items-start gap-3 rounded-lg border p-3 text-left text-sm transition-colors hover:bg-muted",
-                    current.selectedOptionId === option.id && "border-primary bg-primary/5",
-                  )}
-                >
-                  <span className="font-mono font-medium">{option.label}.</span>
-                  <span className="flex-1">
-                    <MarkdownContent content={option.text} className="[&>p]:m-0" />
-                  </span>
-                </button>
-              ))}
-            </div>
 
-            <div className="mt-6 flex justify-between">
-              <Button
-                variant="outline"
-                onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
-                disabled={currentIndex === 0}
-              >
-                Sebelumnya
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setCurrentIndex((i) => Math.min(items.length - 1, i + 1))}
-                disabled={currentIndex === items.length - 1}
-              >
-                Selanjutnya
-              </Button>
+            <div>
+              <p className="mb-2 text-sm text-muted-foreground">
+                Soal {currentIndex + 1} dari {items.length}
+              </p>
+              <MarkdownContent content={current.question.questionText} />
+              {current.question.imageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element -- URL Cloudinary eksternal, domain belum dikonfigurasi utk next/image
+                <img
+                  src={current.question.imageUrl}
+                  alt="Gambar soal"
+                  className="my-4 max-w-full rounded-lg border"
+                />
+              )}
+              <div className="mt-6 flex flex-col gap-2">
+                {current.question.options.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => selectOption(current.question.id, option.id)}
+                    className={cn(
+                      "flex items-start gap-3 rounded-lg border p-3 text-left text-sm transition-colors hover:bg-muted",
+                      current.selectedOptionId === option.id && "border-primary bg-primary/5",
+                    )}
+                  >
+                    <span className="font-mono font-medium">{option.label}.</span>
+                    <span className="flex-1">
+                      <MarkdownContent content={option.text} className="[&>p]:m-0" />
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-6 flex justify-between">
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+                  disabled={currentIndex === 0}
+                >
+                  Sebelumnya
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentIndex((i) => Math.min(items.length - 1, i + 1))}
+                  disabled={currentIndex === items.length - 1}
+                >
+                  Selanjutnya
+                </Button>
+              </div>
             </div>
-          </>
+          </div>
         )}
       </main>
     </div>

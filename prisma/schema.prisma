@@ -87,6 +87,7 @@ model User {
 
   createdQuestions Question[]            @relation("QuestionCreatedBy")
   createdLessons   Lesson[]              @relation("LessonCreatedBy")
+  createdPassages  Passage[]             @relation("PassageCreatedBy")
   sessions         ExerciseSession[]
   pathProgress     StudentPathProgress[]
   masteryRecords   MasteryRecord[]
@@ -125,6 +126,7 @@ model Topic {
   lessons          Lesson[]
   pathSteps        PathStep[]
   questions        Question[]
+  passages         Passage[]
   masteryRecords   MasteryRecord[]
   exerciseSessions ExerciseSession[]
 
@@ -208,11 +210,39 @@ model StudentPathProgress {
 // sebelum di-crop, dipakai admin sbg referensi di tab "Crop Diagram" (section 5 & 6).
 // ---------------------------------------------------------------------------
 
+// Satu bacaan (reading passage) dipakai bersama oleh beberapa Question — umum
+// di section Reading Bahasa Inggris (mis. 1 teks, 4-5 nomor soal). Terpisah
+// dari Question supaya teksnya tidak diduplikasi & UI bisa menampilkannya
+// sekali per kelompok soal, bukan berulang di tiap nomor.
+model Passage {
+  id          String   @id @default(cuid())
+  // "Topik rumah" passage ini (dari baris pertama yang memperkenalkannya saat
+  // Excel import) — cuma buat organisasi, BUKAN pembatas siapa boleh
+  // mereferensikannya. Satu passage biasa dipakai lintas topik skill yang
+  // berbeda (mis. "Reading - Main Idea" & "Reading - Detail Information"
+  // sama-sama soal dari 1 bacaan), makanya title unik GLOBAL, bukan per-topik.
+  topicId     String
+  topic       Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  title       String   @unique // label admin, mis. "Passage 1" — key pencocokan saat Excel import
+  content     String   @db.Text // markdown, teks bacaan
+  createdById String
+  createdBy   User     @relation("PassageCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+
+  questions Question[]
+
+  @@map("passages")
+}
+
 model Question {
   id         String     @id @default(cuid())
   topicId    String
   topic      Topic      @relation(fields: [topicId], references: [id], onDelete: Restrict)
   difficulty Difficulty
+
+  // Diisi kalau soal ini bagian dari kelompok reading comprehension.
+  passageId String?
+  passage   Passage? @relation(fields: [passageId], references: [id], onDelete: SetNull)
 
   questionText String  @db.Text // markdown + LaTeX
   explanation  String? @db.Text // pembahasan, markdown + LaTeX
@@ -230,6 +260,7 @@ model Question {
   tryoutAppearances TryoutQuestion[]
 
   @@index([topicId, difficulty])
+  @@index([passageId])
   @@map("questions")
 }
 

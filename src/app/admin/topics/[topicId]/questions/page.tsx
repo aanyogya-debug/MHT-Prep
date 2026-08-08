@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import type { Question, QuestionOption, Topic } from "@prisma/client";
+import type { Passage, Question, QuestionOption, Topic } from "@prisma/client";
 import { Navbar } from "@/components/navbar";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 import { apiFetch, ApiError } from "@/lib/api-client";
@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-type QuestionWithOptions = Question & { options: QuestionOption[] };
+type QuestionWithOptions = Question & { options: QuestionOption[]; passage: Passage | null };
 
 export default function AdminTopicQuestionsPage() {
   const { user, isReady } = useRequireAuth("ADMIN");
@@ -89,6 +89,7 @@ export default function AdminTopicQuestionsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Tingkat</TableHead>
+                  <TableHead>Bacaan</TableHead>
                   <TableHead>Teks Soal</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
@@ -96,7 +97,7 @@ export default function AdminTopicQuestionsPage() {
               <TableBody>
                 {questions.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center text-muted-foreground">
+                    <TableCell colSpan={4} className="text-center text-muted-foreground">
                       Belum ada soal
                     </TableCell>
                   </TableRow>
@@ -105,6 +106,9 @@ export default function AdminTopicQuestionsPage() {
                   <TableRow key={question.id}>
                     <TableCell>
                       <Badge variant="secondary">{question.difficulty}</Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {question.passage?.title ?? "-"}
                     </TableCell>
                     <TableCell className="max-w-md truncate">{question.questionText}</TableCell>
                     <TableCell className="flex justify-end gap-2">

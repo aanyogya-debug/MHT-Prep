@@ -23,6 +23,12 @@ interface ResultOption {
   isCorrect: boolean;
 }
 
+interface ResultPassage {
+  id: string;
+  title: string;
+  content: string;
+}
+
 interface ResultItem {
   id: string;
   orderIndex: number;
@@ -34,6 +40,7 @@ interface ResultItem {
     questionText: string;
     explanation: string | null;
     options: ResultOption[];
+    passage: ResultPassage | null;
   };
 }
 
@@ -119,45 +126,62 @@ export default function SessionResultsPage() {
       </Card>
 
       <div className="flex flex-col gap-6">
-        {sortedItems.map((item, index) => (
-          <div key={item.id} className="rounded-lg border p-4">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-sm font-medium">Soal {index + 1}</span>
-              {item.isCorrect === true && <Badge>Benar</Badge>}
-              {item.isCorrect === false && <Badge variant="destructive">Salah</Badge>}
-              {item.isCorrect === null && <Badge variant="secondary">Tidak dijawab</Badge>}
-            </div>
-            <MarkdownContent content={item.question.questionText} />
-            <div className="mt-3 flex flex-col gap-1.5">
-              {item.question.options.map((option) => (
-                <div
-                  key={option.id}
-                  className={cn(
-                    "flex items-start gap-2 rounded-md border p-2 text-sm",
-                    option.isCorrect && "border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30",
-                    option.id === item.selectedOptionId &&
-                      !option.isCorrect &&
-                      "border-destructive bg-destructive/5",
-                  )}
-                >
-                  <span className="font-mono font-medium">{option.label}.</span>
-                  <span className="flex-1">
-                    <MarkdownContent content={option.text} className="[&>p]:m-0" />
-                  </span>
-                  {option.id === item.selectedOptionId && (
-                    <span className="text-xs text-muted-foreground">Jawabanmu</span>
-                  )}
+        {sortedItems.map((item, index) => {
+          // Tampilkan passage sekali saja di depan kelompok soal yang
+          // berbagi bacaan yang sama, bukan diulang tiap nomor.
+          const showPassage =
+            item.question.passage && sortedItems[index - 1]?.question.passage?.id !== item.question.passage.id;
+
+          return (
+            <div key={item.id} className="flex flex-col gap-3">
+              {showPassage && item.question.passage && (
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <p className="mb-2 text-sm font-medium text-muted-foreground">
+                    {item.question.passage.title}
+                  </p>
+                  <MarkdownContent content={item.question.passage.content} />
                 </div>
-              ))}
-            </div>
-            {item.question.explanation && (
-              <div className="mt-3 rounded-md bg-muted p-3">
-                <p className="mb-1 text-xs font-medium text-muted-foreground">Pembahasan</p>
-                <MarkdownContent content={item.question.explanation} />
+              )}
+              <div className="rounded-lg border p-4">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="text-sm font-medium">Soal {index + 1}</span>
+                  {item.isCorrect === true && <Badge>Benar</Badge>}
+                  {item.isCorrect === false && <Badge variant="destructive">Salah</Badge>}
+                  {item.isCorrect === null && <Badge variant="secondary">Tidak dijawab</Badge>}
+                </div>
+                <MarkdownContent content={item.question.questionText} />
+                <div className="mt-3 flex flex-col gap-1.5">
+                  {item.question.options.map((option) => (
+                    <div
+                      key={option.id}
+                      className={cn(
+                        "flex items-start gap-2 rounded-md border p-2 text-sm",
+                        option.isCorrect && "border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30",
+                        option.id === item.selectedOptionId &&
+                          !option.isCorrect &&
+                          "border-destructive bg-destructive/5",
+                      )}
+                    >
+                      <span className="font-mono font-medium">{option.label}.</span>
+                      <span className="flex-1">
+                        <MarkdownContent content={option.text} className="[&>p]:m-0" />
+                      </span>
+                      {option.id === item.selectedOptionId && (
+                        <span className="text-xs text-muted-foreground">Jawabanmu</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {item.question.explanation && (
+                  <div className="mt-3 rounded-md bg-muted p-3">
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">Pembahasan</p>
+                    <MarkdownContent content={item.question.explanation} />
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
 
       <Button className="mt-6" render={<Link href="/" />}>

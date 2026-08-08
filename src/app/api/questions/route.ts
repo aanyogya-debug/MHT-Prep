@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   try {
     const questions = await db.question.findMany({
       where: { topicId },
-      include: { options: true },
+      include: { options: true, passage: true },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json({ questions });
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
           })),
         },
       },
-      include: { options: true },
+      include: { options: true, passage: true },
     });
     return NextResponse.json({ question }, { status: 201 });
   } catch (err) {

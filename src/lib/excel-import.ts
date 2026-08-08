@@ -2,7 +2,10 @@ import { DIFFICULTIES, OPTION_LABELS } from "./validations/question";
 
 // Template kolom Excel — didesain dari nol karena dokumen v0.2.0 yang jadi
 // rujukan aslinya (section 6 brief) tidak ada di project ini. Satu baris =
-// satu soal pilihan ganda 5 opsi.
+// satu soal pilihan ganda 5 opsi. passage_title/passage_text opsional —
+// dipakai utk reading comprehension (satu bacaan, beberapa nomor soal):
+// isi passage_text lengkap di baris kemunculan PERTAMA judul itu saja,
+// baris-baris berikutnya dgn passage_title sama cukup isi judulnya.
 export const IMPORT_COLUMNS = [
   "subject",
   "topic",
@@ -16,6 +19,8 @@ export const IMPORT_COLUMNS = [
   "correct_option",
   "explanation",
   "image_url",
+  "passage_title",
+  "passage_text",
 ] as const;
 
 export interface RawImportRow {
@@ -32,6 +37,8 @@ export interface RawImportRow {
   correct_option?: string;
   explanation?: string;
   image_url?: string;
+  passage_title?: string;
+  passage_text?: string;
 }
 
 export interface ParsedQuestionRow {
@@ -44,6 +51,14 @@ export interface ParsedQuestionRow {
   options: { label: string; text: string; isCorrect: boolean }[];
   explanation?: string;
   imageUrl?: string;
+  passageKey?: string; // = title (unik global) — dipetakan ke id nyata (existing/baru) saat commit
+}
+
+export interface NewPassageToCreate {
+  key: string; // = title, sama dgn ParsedQuestionRow.passageKey
+  topicId: string; // "topik rumah" = topik baris yg pertama kali memperkenalkan passage ini
+  title: string;
+  content: string;
 }
 
 export interface RowValidationError {
@@ -54,6 +69,7 @@ export interface RowValidationError {
 export interface ValidateImportResult {
   validRows: ParsedQuestionRow[];
   errors: RowValidationError[];
+  newPassages: NewPassageToCreate[];
 }
 
 function topicKey(subjectSlug: string, topicName: string): string {
@@ -64,15 +80,25 @@ export function buildTopicLookupKey(subjectSlug: string, topicName: string): str
   return topicKey(subjectSlug, topicName);
 }
 
-// topicLookup: "subjectSlug::topicName" -> topicId, dicari pemanggil dari DB
-// sebelum manggil fungsi ini — fungsi ini sendiri murni (tidak sentuh DB),
-// jadi bisa ditest tanpa database.
+export function buildPassageLookupKey(title: string): string {
+  return title;
+}
+
+// topicLookup: "subjectSlug::topicName" -> topicId
+// existingPassageLookup: title -> passageId (passage yg sudah ada di DB). Title
+// unik GLOBAL (bukan per-topik) karena satu passage lazim dipakai lintas topik
+// skill yang berbeda (mis. "Reading - Main Idea" & "Reading - Detail
+// Information" sama-sama soal dari 1 bacaan yang sama).
+// Keduanya dicari pemanggil dari DB sebelum manggil fungsi ini — fungsi ini
+// sendiri murni (tidak sentuh DB), jadi bisa ditest tanpa database.
 export function validateImportRows(
   rows: RawImportRow[],
   topicLookup: ReadonlyMap<string, string>,
+  existingPassageLookup: ReadonlyMap<string, string> = new Map(),
 ): ValidateImportResult {
   const validRows: ParsedQuestionRow[] = [];
   const errors: RowValidationError[] = [];
+  const newPassagesByKey = new Map<string, NewPassageToCreate>();
 
   for (const row of rows) {
     const rowErrors: string[] = [];
@@ -111,6 +137,23 @@ export function validateImportRows(
       }
     }
 
+    let passageKey: string | undefined;
+    const passageTitle = row.passage_title?.trim();
+    if (passageTitle && topicId) {
+      passageKey = buildPassageLookupKey(passageTitle);
+      const alreadyKnown = existingPassageLookup.has(passageKey) || newPassagesByKey.has(passageKey);
+      if (!alreadyKnown) {
+        const passageText = row.passage_text?.trim();
+        if (!passageText) {
+          rowErrors.push(
+            `passage_text wajib diisi utk kemunculan pertama passage "${passageTitle}"`,
+          );
+        } else {
+          newPassagesByKey.set(passageKey, { key: passageKey, topicId, title: passageTitle, content: passageText });
+        }
+      }
+    }
+
     if (rowErrors.length > 0) {
       errors.push({ rowNumber: row.rowNumber, message: rowErrors.join("; ") });
       continue;
@@ -130,8 +173,9 @@ export function validateImportRows(
       })),
       explanation: row.explanation?.trim() || undefined,
       imageUrl: row.image_url?.trim() || undefined,
+      passageKey,
     });
   }
 
-  return { validRows, errors };
+  return { validRows, errors, newPassages: Array.from(newPassagesByKey.values()) };
 }

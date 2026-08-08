@@ -16,7 +16,7 @@ export async function GET(
   try {
     const question = await db.question.findUnique({
       where: { id },
-      include: { options: true },
+      include: { options: true, passage: true },
     });
     if (!question) {
       return NextResponse.json({ error: "Soal tidak ditemukan" }, { status: 404 });
@@ -69,7 +69,7 @@ export async function PATCH(
             }
           : {}),
       },
-      include: { options: true },
+      include: { options: true, passage: true },
     });
     return NextResponse.json({ question });
   } catch (err) {

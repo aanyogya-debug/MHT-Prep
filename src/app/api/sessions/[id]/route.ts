@@ -18,7 +18,7 @@ export async function GET(
       where: { id },
       include: {
         items: {
-          include: { question: { include: { options: true } } },
+          include: { question: { include: { options: true, passage: true } } },
           orderBy: { orderIndex: "asc" },
         },
       },
@@ -40,7 +40,7 @@ export async function GET(
         where: { id },
         include: {
           items: {
-            include: { question: { include: { options: true } } },
+            include: { question: { include: { options: true, passage: true } } },
             orderBy: { orderIndex: "asc" },
           },
         },

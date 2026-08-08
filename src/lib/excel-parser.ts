@@ -46,6 +46,8 @@ export async function parseImportFile(buffer: ArrayBuffer): Promise<RawImportRow
       correct_option: get("correct_option"),
       explanation: get("explanation"),
       image_url: get("image_url"),
+      passage_title: get("passage_title"),
+      passage_text: get("passage_text"),
     });
   });
 
@@ -68,6 +70,42 @@ export async function buildImportTemplate(): Promise<Buffer> {
     "7",
     "B",
     "$2 + 2 = 4$",
+    "",
+    "",
+    "",
+  ]);
+  // Contoh reading comprehension: 2 soal berbagi 1 passage. passage_text
+  // cukup diisi di kemunculan pertama; baris kedua cukup passage_title saja.
+  sheet.addRow([
+    "bahasa_inggris",
+    "Reading - Main Idea",
+    "EASY",
+    "What is the main idea of the passage?",
+    "The weather in Jakarta",
+    "The history of Jakarta",
+    "The population growth of Jakarta",
+    "The traffic in Jakarta",
+    "The food in Jakarta",
+    "C",
+    "",
+    "",
+    "Passage 1",
+    "Jakarta has grown rapidly over the past few decades. In 1950, the city had fewer than two million residents. Today, the greater Jakarta area is home to more than thirty million people, making it one of the most populous urban regions in the world.",
+  ]);
+  sheet.addRow([
+    "bahasa_inggris",
+    "Reading - Detail Information",
+    "EASY",
+    "According to the passage, how many people lived in Jakarta in 1950?",
+    "Fewer than two million",
+    "More than thirty million",
+    "About ten million",
+    "About twenty million",
+    "About five million",
+    "A",
+    "",
+    "",
+    "Passage 1",
     "",
   ]);
   const buffer = await workbook.xlsx.writeBuffer();

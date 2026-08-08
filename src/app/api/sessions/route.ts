@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
         },
       },
       include: {
-        items: { include: { question: { include: { options: true } } }, orderBy: { orderIndex: "asc" } },
+        items: { include: { question: { include: { options: true, passage: true } } }, orderBy: { orderIndex: "asc" } },
       },
     });
 

@@ -47,3 +47,20 @@ export type CreateQuestionInput = z.infer<typeof createQuestionSchema>;
 export type UpdateQuestionInput = z.infer<typeof updateQuestionSchema>;
 
 export const OPTION_LABELS = ["A", "B", "C", "D", "E"] as const;
+
+const DIFFICULTY_ORDER: Record<(typeof DIFFICULTIES)[number], number> = {
+  EASY: 0,
+  MEDIUM: 1,
+  HARD: 2,
+};
+
+// Dipakai saat menarik soal utk practice step (PathStep.difficultyMin/Max
+// mendeskripsikan rentang inklusif, bukan satu nilai).
+export function difficultyRange(
+  min: (typeof DIFFICULTIES)[number],
+  max: (typeof DIFFICULTIES)[number],
+): (typeof DIFFICULTIES)[number][] {
+  const lo = DIFFICULTY_ORDER[min];
+  const hi = DIFFICULTY_ORDER[max];
+  return DIFFICULTIES.filter((d) => DIFFICULTY_ORDER[d] >= lo && DIFFICULTY_ORDER[d] <= hi);
+}

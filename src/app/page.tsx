@@ -23,9 +23,17 @@ export default function Home() {
             <Button variant="outline" render={<Link href="/admin/tryouts" />}>
               Kelola Tryout
             </Button>
+            <Button variant="outline" render={<Link href="/admin/import" />}>
+              Import Soal
+            </Button>
           </div>
         ) : (
-          <p className="text-muted-foreground">Dashboard siswa belum dibangun.</p>
+          <div className="flex gap-3">
+            <Button render={<Link href="/practice" />}>Latihan Bebas</Button>
+            <Button variant="outline" render={<Link href="/tryouts" />}>
+              Tryout
+            </Button>
+          </div>
         )}
       </main>
     </div>

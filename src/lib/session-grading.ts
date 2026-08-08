@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { gradeAnswer, summarizeSession, type GradedAnswer } from "./scoring";
+import { gradeAnswer, summarizeSession, scoreToPercentage, type GradedAnswer } from "./scoring";
 import { hasPassedThreshold } from "./learning-path";
 import { markStepCompletedAndUnlockNext } from "./path-progress-service";
 
@@ -55,7 +55,14 @@ export async function finalizeSession(
   await updateMasteryRecords(tx, session.studentId, gradedItems);
 
   if (session.pathStepId) {
-    await updatePathProgress(tx, session.studentId, session.pathStepId, session.id, summary.score);
+    await updatePathProgress(
+      tx,
+      session.studentId,
+      session.pathStepId,
+      session.id,
+      summary.score,
+      session.totalQuestions,
+    );
   }
 }
 
@@ -97,9 +104,11 @@ async function updatePathProgress(
   pathStepId: string,
   sessionId: string,
   score: number,
+  totalQuestions: number,
 ): Promise<void> {
   const pathStep = await tx.pathStep.findUniqueOrThrow({ where: { id: pathStepId } });
-  const passed = hasPassedThreshold(score, pathStep.unlockThreshold);
+  const percentage = scoreToPercentage(score, totalQuestions);
+  const passed = hasPassedThreshold(percentage, pathStep.unlockThreshold);
 
   if (passed) {
     await markStepCompletedAndUnlockNext(tx, studentId, pathStepId, sessionId);

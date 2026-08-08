@@ -53,3 +53,14 @@ export function summarizeSession(items: GradedAnswer[]): SessionSummary {
 
   return summary;
 }
+
+// unlockThreshold (PathStep, section 3 brief: "default 60") adalah PERSENTASE
+// dari skor maksimum sesi, bukan skor mentah — skor mentah 5 soal cuma bisa
+// maksimum 20 (5*4), jadi threshold 60 mustahil tercapai kalau dibandingkan
+// mentah-mentah. Dikonversi di sini supaya threshold tetap masuk akal
+// berapa pun jumlah soal di practice step-nya.
+export function scoreToPercentage(score: number, totalQuestions: number): number {
+  if (totalQuestions <= 0) return 0;
+  const maxScore = totalQuestions * POINTS_CORRECT;
+  return (score / maxScore) * 100;
+}

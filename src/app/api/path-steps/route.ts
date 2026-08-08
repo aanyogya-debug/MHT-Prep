@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, requireRole } from "@/lib/auth/guard";
 import { createPathStepSchema } from "@/lib/validations/path-step";
+import { computeUnlockedStepIds, resolveStepStatus } from "@/lib/learning-path";
 
 export async function GET(request: NextRequest) {
   const auth = requireAuth(request);
@@ -18,7 +19,24 @@ export async function GET(request: NextRequest) {
       include: { lesson: true },
       orderBy: { orderIndex: "asc" },
     });
-    return NextResponse.json({ pathSteps });
+
+    // Status (locked/unlocked/completed) dihitung relatif ke SIAPA yang minta
+    // — dipakai UI siswa utk tahu step mana yang boleh dibuka (halaman admin
+    // CRUD path-step cukup abaikan field ini).
+    const progress = await db.studentPathProgress.findMany({
+      where: { studentId: auth.payload.sub, pathStepId: { in: pathSteps.map((s) => s.id) } },
+    });
+    const completedIds = new Set(
+      progress.filter((p) => p.status === "COMPLETED").map((p) => p.pathStepId),
+    );
+    const unlockedIds = computeUnlockedStepIds(pathSteps, completedIds);
+
+    const pathStepsWithStatus = pathSteps.map((step) => ({
+      ...step,
+      status: resolveStepStatus(step.id, unlockedIds, completedIds),
+    }));
+
+    return NextResponse.json({ pathSteps: pathStepsWithStatus });
   } catch (err) {
     console.error("GET /api/path-steps failed:", err);
     return NextResponse.json({ error: "Terjadi kesalahan pada server" }, { status: 500 });

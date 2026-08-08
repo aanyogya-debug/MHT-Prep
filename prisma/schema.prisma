@@ -1,0 +1,355 @@
+// Prisma schema — MHT Prep (v0.3.0)
+//
+// Model dasar (User, Subject, Topic, Question, ExerciseSession, MasteryRecord) direkonstruksi
+// dari deskripsi narasi di TECHNICAL_DOCUMENT_v0.3_DESIGN_BRIEF.md — dokumen v0.2.0 yang
+// menjadi rujukan aslinya tidak ada di folder ini. Sesuaikan bila detail v0.2.0 berbeda.
+//
+// Ekstensi eksplisit dari brief v0.3:
+//   - Section 3: Lesson, PathStep, StudentPathProgress, Topic.orderIndex, ExerciseSession.pathStepId
+//   - Section 4: Tryout, ExerciseSession.tryoutId
+//   - Section 5: Question.imageUrl / Question.sourceImageUrl (pipeline Cloudinary)
+//
+// Penyesuaian dari snippet ilustratif di brief (yang ditulis dengan tipe SQLite-friendly):
+//   - String enum-like ('lesson'|'practice', 'locked'|'unlocked'|'completed', dst) -> native Postgres enum
+//   - Tryout.sectionQuotas: String (JSON manual) -> Json (native, query-able)
+//   - createdBy: String polos -> relasi FK ke User (integritas referensial)
+//   - Difficulty dipakai sebagai enum bersama (Question.difficulty, PathStep.difficultyMin/Max)
+//     supaya bisa dibandingkan/di-query konsisten; Tryout.difficultyTier tetap String bebas
+//     karena butuh label campuran seperti "easy-medium" (lihat section 4 & 8).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Supabase: gunakan connection pooler (PgBouncer, port 6543) untuk runtime app,
+  // dan koneksi langsung (port 5432) khusus migrasi lewat directUrl.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  STUDENT
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum SessionMode {
+  PRACTICE // latihan bebas per topik ATAU practice step di dalam learning path
+  SIMULATION // tryout — 100 soal gabungan, 200 menit
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED // timer habis tanpa submit manual
+}
+
+enum PathStepType {
+  LESSON
+  PRACTICE
+}
+
+enum PathStepStatus {
+  LOCKED
+  UNLOCKED
+  COMPLETED
+}
+
+// ---------------------------------------------------------------------------
+// Auth & users — 1 admin (orang tua), banyak student (anak). Bukan multi-tenant.
+// JWT + bcrypt, admin registration tertutup (di-seed manual, lihat prisma/seed.ts).
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(STUDENT)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdQuestions Question[]            @relation("QuestionCreatedBy")
+  createdLessons   Lesson[]              @relation("LessonCreatedBy")
+  sessions         ExerciseSession[]
+  pathProgress     StudentPathProgress[]
+  masteryRecords   MasteryRecord[]
+
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Struktur subject/topic mengikuti format ujian MHT (section 2)
+// 4 subject top-level tetap (TPS, Matematika, IPA, Bahasa Inggris); semua topik
+// granular nempel di salah satunya via Topic.subjectId.
+// ---------------------------------------------------------------------------
+
+model Subject {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique // tps | matematika | ipa | bahasa_inggris — dipakai sbg key sectionQuotas
+  description String?
+  createdAt   DateTime @default(now())
+
+  topics Topic[]
+
+  @@map("subjects")
+}
+
+model Topic {
+  id         String   @id @default(cuid())
+  subjectId  String
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  name       String
+  // Urutan per-subject (v0.3), BUKAN urutan global — siswa bisa jalan paralel
+  // di beberapa subject sekaligus (section 3). Diisi manual oleh admin (section 8).
+  orderIndex Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  lessons          Lesson[]
+  pathSteps        PathStep[]
+  questions        Question[]
+  masteryRecords   MasteryRecord[]
+  exerciseSessions ExerciseSession[]
+
+  @@index([subjectId, orderIndex])
+  @@map("topics")
+}
+
+// ---------------------------------------------------------------------------
+// Section 3 — Learning Path: materi berjenjang per topik
+// Alur: Materi 1 -> Latihan 1 -> Materi 2 -> Latihan 2 -> ... -> Sesi Campuran/Review
+// Progres dikunci: step berikutnya terbuka hanya kalau skor latihan lulus unlockThreshold.
+// ---------------------------------------------------------------------------
+
+model Lesson {
+  id          String   @id @default(cuid())
+  topicId     String
+  topic       Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  orderIndex  Int
+  title       String
+  content     String   @db.Text // markdown + LaTeX, konsisten dgn renderLatex() yang sudah ada
+  createdById String
+  createdBy   User     @relation("LessonCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+
+  pathSteps PathStep[]
+
+  @@index([topicId, orderIndex])
+  @@map("lessons")
+}
+
+model PathStep {
+  id         String       @id @default(cuid())
+  topicId    String
+  topic      Topic        @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  orderIndex Int
+  stepType   PathStepType
+
+  // Hanya diisi kalau stepType = LESSON
+  lessonId String?
+  lesson   Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+
+  // Hanya diisi kalau stepType = PRACTICE
+  difficultyMin Difficulty?
+  difficultyMax Difficulty?
+  questionCount Int?
+
+  // nullable = auto-unlock tanpa syarat skor (dipakai utk topik tanpa prasyarat
+  // pedagogis kuat, mis. Biologi/Reading — lihat section 3 & 8). Default disarankan 60.
+  unlockThreshold Int?
+
+  progress StudentPathProgress[]
+  sessions ExerciseSession[]
+
+  @@index([topicId, orderIndex])
+  @@map("path_steps")
+}
+
+model StudentPathProgress {
+  id         String         @id @default(cuid())
+  studentId  String
+  student    User           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  pathStepId String
+  pathStep   PathStep       @relation(fields: [pathStepId], references: [id], onDelete: Cascade)
+  status     PathStepStatus @default(LOCKED)
+
+  // Terisi begitu practice step dikerjakan; retry membuat ExerciseSession baru yang
+  // nyambung ke pathStepId yang sama, sessionId di sini menunjuk attempt yang relevan
+  // (mis. attempt terakhir/yang meluluskan threshold).
+  sessionId String?
+  session   ExerciseSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  completedAt DateTime?
+
+  @@unique([studentId, pathStepId])
+  @@map("student_path_progress")
+}
+
+// ---------------------------------------------------------------------------
+// Bank soal. gambar_url (section 5) = imageUrl: URL Cloudinary hasil crop, siap
+// tampil ke siswa. sourceImageUrl = kolom bantu terpisah: foto halaman asli utuh
+// sebelum di-crop, dipakai admin sbg referensi di tab "Crop Diagram" (section 5 & 6).
+// ---------------------------------------------------------------------------
+
+model Question {
+  id         String     @id @default(cuid())
+  topicId    String
+  topic      Topic      @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  difficulty Difficulty
+
+  questionText String  @db.Text // markdown + LaTeX
+  explanation  String? @db.Text // pembahasan, markdown + LaTeX
+
+  imageUrl       String? // gambar_url — hasil crop Cloudinary (c_crop,x,y,w,h)
+  sourceImageUrl String? // foto halaman asli utuh, referensi crop (bukan gambar_url)
+
+  createdById String
+  createdBy   User     @relation("QuestionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  options      QuestionOption[]
+  sessionItems ExerciseSessionItem[]
+
+  @@index([topicId, difficulty])
+  @@map("questions")
+}
+
+model QuestionOption {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  label      String // A | B | C | D | E
+  text       String   @db.Text // markdown + LaTeX
+  isCorrect  Boolean  @default(false)
+
+  selectedIn ExerciseSessionItem[]
+
+  @@unique([questionId, label])
+  @@map("question_options")
+}
+
+// ---------------------------------------------------------------------------
+// Section 4 — Tryout berkala: simulasi full MHT (100 soal, 200 menit gabungan).
+// Satu tryout = satu ExerciseSession biasa (mode: SIMULATION) — reuse 100% mesin
+// exercise_sessions yang sudah ada (timer, autosave, transactional submit, skor +4/-1/0).
+// Tidak perlu tabel history terpisah: query ExerciseSession where tryoutId terisi,
+// urut createdAt, plot score.
+// ---------------------------------------------------------------------------
+
+model Tryout {
+  id             String   @id @default(cuid())
+  title          String
+  // Label bebas admin (bukan enum tertutup) — progresi kesulitan antar-tryout diatur
+  // manual, mis. "easy-medium" (#1-2), "medium-hard" (#3-4), "mendekati-asli" (#5+).
+  difficultyTier String
+  // JSON kuota per section, mis: {"tps":40,"matematika":20,"ipa":20,"bahasa_inggris":20}
+  sectionQuotas  Json
+  createdAt      DateTime @default(now())
+
+  sessions ExerciseSession[]
+
+  @@map("tryouts")
+}
+
+// ---------------------------------------------------------------------------
+// Mesin sesi latihan/tryout yang sudah ada (v0.2.0) — timer, autosave, transactional
+// submit, skor +4/-1/0. pathStepId & tryoutId (v0.3) menandai asal sesi:
+//   - keduanya null           -> latihan bebas per topik
+//   - pathStepId terisi       -> practice step di dalam learning path
+//   - tryoutId terisi         -> tryout (mode wajib SIMULATION)
+// ---------------------------------------------------------------------------
+
+model ExerciseSession {
+  id        String        @id @default(cuid())
+  studentId String
+  student   User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  mode      SessionMode
+  status    SessionStatus @default(IN_PROGRESS)
+
+  // Diisi utk sesi yang scoped ke satu topik (latihan bebas & practice step di path).
+  // Null utk tryout (gabungan 4 subject) & sesi campuran/review lintas topik.
+  topicId String?
+  topic   Topic?  @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  pathStepId String?
+  pathStep   PathStep? @relation(fields: [pathStepId], references: [id], onDelete: SetNull)
+
+  tryoutId String?
+  tryout   Tryout? @relation(fields: [tryoutId], references: [id], onDelete: SetNull)
+
+  totalQuestions  Int
+  durationMinutes Int
+
+  startedAt   DateTime  @default(now())
+  submittedAt DateTime?
+
+  // Diisi saat submit (transactional) — skor akhir formula +4/-1/0
+  score           Int?
+  correctCount    Int?
+  incorrectCount  Int?
+  unansweredCount Int?
+
+  createdAt DateTime @default(now())
+
+  items        ExerciseSessionItem[]
+  pathProgress StudentPathProgress[]
+
+  @@index([studentId, mode])
+  @@index([studentId, tryoutId])
+  @@map("exercise_sessions")
+}
+
+// Baris per-soal di dalam sebuah sesi — dasar utk autosave (selectedOptionId +
+// answeredAt ter-update tiap kali siswa menjawab) dan submit transactional
+// (isCorrect + pointsEarned dihitung sekali saat submit).
+model ExerciseSessionItem {
+  id         String          @id @default(cuid())
+  sessionId  String
+  session    ExerciseSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question        @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  orderIndex Int
+
+  selectedOptionId String?
+  selectedOption   QuestionOption? @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
+
+  isCorrect    Boolean? // null = belum dijawab / belum di-submit
+  pointsEarned Int? // +4 / -1 / 0, diisi saat submit
+  answeredAt   DateTime? // timestamp autosave
+
+  @@unique([sessionId, questionId])
+  @@index([sessionId, orderIndex])
+  @@map("exercise_session_items")
+}
+
+// ---------------------------------------------------------------------------
+// Mastery per topik (v0.2.0, tetap dipakai apa adanya).
+// ---------------------------------------------------------------------------
+
+model MasteryRecord {
+  id                 String   @id @default(cuid())
+  studentId          String
+  student            User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  topicId            String
+  topic              Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  masteryScore       Float    @default(0) // 0-100
+  questionsAttempted Int      @default(0)
+  questionsCorrect   Int      @default(0)
+  updatedAt          DateTime @updatedAt
+
+  @@unique([studentId, topicId])
+  @@map("mastery_records")
+}

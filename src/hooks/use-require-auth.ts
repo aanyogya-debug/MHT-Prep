@@ -2,6 +2,7 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
+import type { Role } from "@prisma/client";
 import { useAuthStore } from "@/store/auth";
 
 const emptySubscribe = () => () => {};
@@ -23,21 +24,30 @@ function useHasMounted() {
   );
 }
 
-export function useRequireAuth() {
+export function useRequireAuth(requiredRole?: Role) {
   const router = useRouter();
   const mounted = useHasMounted();
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
 
+  const isAuthorized = !requiredRole || user?.role === requiredRole;
+
   useEffect(() => {
-    if (mounted && !token) {
+    if (!mounted) return;
+    if (!token) {
       router.replace("/login");
+      return;
     }
-  }, [mounted, token, router]);
+    // Sudah login tapi role tidak cocok (mis. student buka halaman admin) —
+    // lempar ke home, bukan /login (kredensialnya valid, cuma tidak diizinkan).
+    if (!isAuthorized) {
+      router.replace("/");
+    }
+  }, [mounted, token, isAuthorized, router]);
 
   return {
     user,
     token,
-    isReady: mounted && !!token,
+    isReady: mounted && !!token && isAuthorized,
   };
 }

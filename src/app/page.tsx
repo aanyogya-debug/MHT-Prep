@@ -18,7 +18,12 @@ export default function Home() {
       <main className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
         <h1 className="text-2xl font-semibold">Selamat datang, {user.name}</h1>
         {user.role === "ADMIN" ? (
-          <Button render={<Link href="/admin/topics" />}>Kelola Topik</Button>
+          <div className="flex gap-3">
+            <Button render={<Link href="/admin/topics" />}>Kelola Topik</Button>
+            <Button variant="outline" render={<Link href="/admin/tryouts" />}>
+              Kelola Tryout
+            </Button>
+          </div>
         ) : (
           <p className="text-muted-foreground">Dashboard siswa belum dibangun.</p>
         )}

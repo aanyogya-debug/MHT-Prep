@@ -238,6 +238,13 @@ export default function AdminTopicsPage() {
                           >
                             Soal
                           </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            render={<Link href={`/admin/topics/${topic.id}/path`} />}
+                          >
+                            Path
+                          </Button>
                           <Button variant="outline" size="sm" onClick={() => openEditDialog(topic)}>
                             Edit
                           </Button>

@@ -66,6 +66,11 @@ enum PathStepStatus {
   COMPLETED
 }
 
+enum TryoutStatus {
+  DRAFT // sedang di-generate/direview admin, belum kelihatan siswa
+  PUBLISHED
+}
+
 // ---------------------------------------------------------------------------
 // Auth & users — 1 admin (orang tua), banyak student (anak). Bukan multi-tenant.
 // JWT + bcrypt, admin registration tertutup (di-seed manual, lihat prisma/seed.ts).
@@ -220,8 +225,9 @@ model Question {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  options      QuestionOption[]
-  sessionItems ExerciseSessionItem[]
+  options           QuestionOption[]
+  sessionItems      ExerciseSessionItem[]
+  tryoutAppearances TryoutQuestion[]
 
   @@index([topicId, difficulty])
   @@map("questions")
@@ -250,18 +256,41 @@ model QuestionOption {
 // ---------------------------------------------------------------------------
 
 model Tryout {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   title          String
   // Label bebas admin (bukan enum tertutup) — progresi kesulitan antar-tryout diatur
   // manual, mis. "easy-medium" (#1-2), "medium-hard" (#3-4), "mendekati-asli" (#5+).
   difficultyTier String
   // JSON kuota per section, mis: {"tps":40,"matematika":20,"ipa":20,"bahasa_inggris":20}
   sectionQuotas  Json
-  createdAt      DateTime @default(now())
+  // DRAFT = hasil generate masih direview/ditukar admin (section 4: "admin
+  // review/tukar soal sebelum publish ke siswa"), PUBLISHED = sudah bisa
+  // dikerjakan siswa. Bukan bagian dari brief asli — celah yang saya temukan
+  // saat implementasi: tanpa status, tidak ada cara membedakan tryout yang
+  // masih draft dari yang siap dikerjakan siswa.
+  status         TryoutStatus @default(DRAFT)
+  createdAt      DateTime     @default(now())
 
-  sessions ExerciseSession[]
+  // Soal yang sudah di-generate/dipilih admin utk tryout ini, direview
+  // sebelum publish. Terpisah dari ExerciseSessionItem — ini "cetakan" soal
+  // per tryout, bukan jawaban siswa (satu tryout dikerjakan banyak siswa,
+  // masing-masing dapat ExerciseSession+ExerciseSessionItem sendiri).
+  questions TryoutQuestion[]
+  sessions  ExerciseSession[]
 
   @@map("tryouts")
+}
+
+model TryoutQuestion {
+  id         String   @id @default(cuid())
+  tryoutId   String
+  tryout     Tryout   @relation(fields: [tryoutId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  orderIndex Int
+
+  @@unique([tryoutId, questionId])
+  @@map("tryout_questions")
 }
 
 // ---------------------------------------------------------------------------

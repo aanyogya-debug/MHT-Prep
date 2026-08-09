@@ -44,11 +44,20 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  nativeButton,
+  render,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
   return (
     <ButtonPrimitive
       data-slot="button"
+      // Base UI defaults nativeButton to true regardless of `render` — kalau
+      // di-render sbg elemen lain (mis. next/link <a>, lewat pola
+      // `render={<Link .../>}` yang dipakai di banyak halaman), itu memicu
+      // warning "expected a native <button>". Default ke false begitu ada
+      // `render` custom, kecuali caller eksplisit override.
+      nativeButton={nativeButton ?? !render}
+      render={render}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

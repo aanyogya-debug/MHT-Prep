@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { Difficulty, Question, QuestionOption } from "@prisma/client";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import { useAuthStore } from "@/store/auth";
 import { MarkdownContent } from "@/components/markdown-content";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,9 +54,38 @@ export function QuestionForm({
   const [correctIndex, setCorrectIndex] = useState(String(findInitialCorrectIndex(question)));
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   function updateOptionText(index: number, text: string) {
     setOptionTexts((prev) => prev.map((t, i) => (i === index ? text : t)));
+  }
+
+  async function handleImageUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = ""; // reset supaya file yg sama bisa dipilih ulang kalau perlu
+    if (!file) return;
+
+    setUploadError(null);
+    setIsUploadingImage(true);
+    try {
+      const token = useAuthStore.getState().token;
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/uploads", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Gagal mengunggah gambar");
+      setImageUrl(data.url);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Gagal mengunggah gambar");
+    } finally {
+      setIsUploadingImage(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -132,13 +162,38 @@ export function QuestionForm({
 
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="image-url">URL gambar (opsional, hasil crop Cloudinary)</Label>
-          <Input
-            id="image-url"
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            placeholder="https://..."
-          />
+          <Label htmlFor="image-url">Gambar soal (opsional)</Label>
+          <div className="flex gap-2">
+            <Input
+              id="image-url"
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              placeholder="https://... atau upload di samping"
+              disabled={isUploadingImage}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isUploadingImage}
+              onClick={() => imageInputRef.current?.click()}
+            >
+              {isUploadingImage ? "Mengunggah..." : "Upload"}
+            </Button>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={handleImageUpload}
+              disabled={isUploadingImage}
+            />
+          </div>
+          {uploadError && <p className="text-xs text-destructive">{uploadError}</p>}
+          {imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element -- URL Cloudinary eksternal, domain belum dikonfigurasi utk next/image
+            <img src={imageUrl} alt="Preview gambar soal" className="mt-1 max-h-32 rounded-md border object-contain" />
+          )}
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="source-image-url">URL halaman asli (opsional, referensi crop)</Label>

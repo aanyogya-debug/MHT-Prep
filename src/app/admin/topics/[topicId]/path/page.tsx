@@ -213,6 +213,10 @@ export default function AdminTopicPathPage() {
                       <div className="flex flex-col gap-2">
                         <Label htmlFor="step-type">Tipe step</Label>
                         <Select
+                          items={[
+                            { value: "LESSON", label: "Materi" },
+                            { value: "PRACTICE", label: "Latihan" },
+                          ]}
                           value={form.stepType}
                           onValueChange={(v) =>
                             setForm((f) => ({ ...f, stepType: v as PathStepType }))
@@ -246,6 +250,7 @@ export default function AdminTopicPathPage() {
                       <div className="flex flex-col gap-2">
                         <Label htmlFor="step-lesson">Materi</Label>
                         <Select
+                          items={lessons.map((lesson) => ({ value: lesson.id, label: lesson.title }))}
                           value={form.lessonId}
                           onValueChange={(v) => setForm((f) => ({ ...f, lessonId: v as string }))}
                         >

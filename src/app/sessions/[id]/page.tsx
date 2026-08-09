@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { MarkdownContent } from "@/components/markdown-content";
@@ -133,9 +134,9 @@ export default function SessionPage() {
     }
   }
 
-  async function handleStopTest() {
+  async function handleSubmitTest() {
     const confirmed = confirm(
-      "Yakin ingin menghentikan tes? Jawaban yang sudah diisi akan disimpan sebagai hasil akhir.",
+      "Kumpulkan tes sekarang? Jawaban yang sudah diisi akan disimpan sebagai hasil akhir.",
     );
     if (!confirmed) return;
     setIsStopping(true);
@@ -155,33 +156,44 @@ export default function SessionPage() {
   const answeredCount = items.filter((it) => it.selectedOptionId !== null).length;
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-6 py-3">
-        <span className="text-sm text-muted-foreground">
-          Terjawab {answeredCount}/{items.length}
-        </span>
-        <span
-          className={cn(
-            "font-mono text-lg font-semibold",
-            timeLeftMs < 60_000 && "text-destructive",
-          )}
-        >
-          {formatTime(timeLeftMs)}
-        </span>
-        <Button variant="outline" size="sm" onClick={handleStopTest} disabled={isStopping}>
-          {isStopping ? "Menyimpan..." : "Hentikan Tes"}
-        </Button>
+    <div className="flex min-h-screen flex-col bg-muted/30">
+      <header className="sticky top-0 z-10 flex flex-col gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur supports-backdrop-filter:bg-background/80 sm:px-6">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-muted-foreground">
+            Terjawab <span className="text-foreground">{answeredCount}</span>/{items.length}
+          </span>
+          <span
+            className={cn(
+              "flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 font-mono text-sm font-semibold",
+              timeLeftMs < 60_000 && "bg-destructive/10 text-destructive",
+            )}
+          >
+            <Clock className="size-3.5" />
+            {formatTime(timeLeftMs)}
+          </span>
+          <Button variant="outline" size="sm" onClick={handleSubmitTest} disabled={isStopping}>
+            {isStopping ? "Menyimpan..." : "Kumpulkan Tes"}
+          </Button>
+        </div>
+        <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-primary transition-all"
+            style={{ width: `${(answeredCount / Math.max(1, items.length)) * 100}%` }}
+          />
+        </div>
       </header>
 
-      <div className="flex flex-wrap gap-1.5 border-b px-6 py-3">
+      <div className="flex flex-wrap gap-1.5 border-b bg-background px-4 py-3 sm:px-6">
         {items.map((it, index) => (
           <button
             key={it.id}
             type="button"
             onClick={() => setCurrentIndex(index)}
             className={cn(
-              "flex size-8 items-center justify-center rounded-md border text-xs font-medium",
-              index === currentIndex ? "border-primary ring-2 ring-primary/30" : "border-border",
+              "flex size-8 items-center justify-center rounded-full border text-xs font-medium transition-colors",
+              index === currentIndex
+                ? "border-primary ring-2 ring-primary/30"
+                : "border-border hover:border-primary/40",
               it.selectedOptionId
                 ? "bg-primary text-primary-foreground"
                 : "bg-background text-foreground",
@@ -194,14 +206,14 @@ export default function SessionPage() {
 
       <main
         className={cn(
-          "mx-auto w-full flex-1 p-6",
+          "mx-auto w-full flex-1 p-4 sm:p-6",
           current?.question.passage ? "max-w-5xl" : "max-w-2xl",
         )}
       >
         {current && (
           <div className={current.question.passage ? "grid gap-6 md:grid-cols-2" : undefined}>
             {current.question.passage && (
-              <div className="rounded-lg border p-4 md:sticky md:top-20 md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
+              <div className="rounded-xl border bg-card p-4 shadow-sm md:sticky md:top-24 md:max-h-[calc(100vh-7rem)] md:overflow-y-auto">
                 <p className="mb-2 text-sm font-medium text-muted-foreground">
                   {current.question.passage.title}
                 </p>
@@ -209,8 +221,8 @@ export default function SessionPage() {
               </div>
             )}
 
-            <div>
-              <p className="mb-2 text-sm text-muted-foreground">
+            <div className="rounded-xl border bg-card p-5 shadow-sm">
+              <p className="mb-3 text-sm font-medium text-muted-foreground">
                 Soal {currentIndex + 1} dari {items.length}
               </p>
               <MarkdownContent content={current.question.questionText} />
@@ -223,22 +235,34 @@ export default function SessionPage() {
                 />
               )}
               <div className="mt-6 flex flex-col gap-2">
-                {current.question.options.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => selectOption(current.question.id, option.id)}
-                    className={cn(
-                      "flex items-start gap-3 rounded-lg border p-3 text-left text-sm transition-colors hover:bg-muted",
-                      current.selectedOptionId === option.id && "border-primary bg-primary/5",
-                    )}
-                  >
-                    <span className="font-mono font-medium">{option.label}.</span>
-                    <span className="flex-1">
-                      <MarkdownContent content={option.text} className="[&>p]:m-0" />
-                    </span>
-                  </button>
-                ))}
+                {current.question.options.map((option) => {
+                  const selected = current.selectedOptionId === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => selectOption(current.question.id, option.id)}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg border p-3 text-left text-sm transition-colors hover:border-primary/40 hover:bg-muted/60",
+                        selected && "border-primary bg-primary/5 hover:bg-primary/5",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
+                          selected
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border text-muted-foreground",
+                        )}
+                      >
+                        {option.label}
+                      </span>
+                      <span className="flex-1">
+                        <MarkdownContent content={option.text} className="[&>p]:m-0" />
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="mt-6 flex justify-between">
@@ -247,6 +271,7 @@ export default function SessionPage() {
                   onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
                   disabled={currentIndex === 0}
                 >
+                  <ChevronLeft className="size-4" />
                   Sebelumnya
                 </Button>
                 <Button
@@ -255,6 +280,7 @@ export default function SessionPage() {
                   disabled={currentIndex === items.length - 1}
                 >
                   Selanjutnya
+                  <ChevronRight className="size-4" />
                 </Button>
               </div>
             </div>

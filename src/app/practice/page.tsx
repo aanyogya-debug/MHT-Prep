@@ -86,6 +86,7 @@ export default function PracticePage() {
             <div className="flex flex-col gap-2">
               <Label htmlFor="subject">Mata pelajaran</Label>
               <Select
+                items={subjects.map((s) => ({ value: s.id, label: s.name }))}
                 value={subjectId}
                 onValueChange={(v) => {
                   setSubjectId(v as string);
@@ -107,7 +108,11 @@ export default function PracticePage() {
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="topic">Topik</Label>
-              <Select value={topicId} onValueChange={(v) => setTopicId(v as string)}>
+              <Select
+                items={topicsForSubject.map((t) => ({ value: t.id, label: t.name }))}
+                value={topicId}
+                onValueChange={(v) => setTopicId(v as string)}
+              >
                 <SelectTrigger id="topic">
                   <SelectValue placeholder="Pilih topik" />
                 </SelectTrigger>

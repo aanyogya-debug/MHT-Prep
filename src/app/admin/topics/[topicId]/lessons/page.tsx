@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { Lesson, Topic } from "@prisma/client";
 import { Navbar } from "@/components/navbar";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import { useAuthStore } from "@/store/auth";
 import { MarkdownContent } from "@/components/markdown-content";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +52,10 @@ export default function AdminTopicLessonsPage() {
   const [form, setForm] = useState<LessonFormState>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!isReady) return;
@@ -93,6 +98,40 @@ export default function AdminTopicLessonsPage() {
     });
     setFormError(null);
     setDialogOpen(true);
+  }
+
+  async function handleImageUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = ""; // reset supaya file yg sama bisa dipilih ulang kalau perlu
+    if (!file) return;
+
+    setUploadError(null);
+    setIsUploadingImage(true);
+    try {
+      const token = useAuthStore.getState().token;
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", "lessons");
+      const res = await fetch("/api/uploads", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Gagal mengunggah gambar");
+
+      const markdownImage = `![gambar](${data.url})`;
+      const textarea = contentTextareaRef.current;
+      const cursorPos = textarea?.selectionStart ?? form.content.length;
+      setForm((f) => ({
+        ...f,
+        content: f.content.slice(0, cursorPos) + markdownImage + f.content.slice(cursorPos),
+      }));
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Gagal mengunggah gambar");
+    } finally {
+      setIsUploadingImage(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -187,8 +226,28 @@ export default function AdminTopicLessonsPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="flex flex-col gap-2">
-                        <Label htmlFor="lesson-content">Isi (markdown + LaTeX)</Label>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="lesson-content">Isi (markdown + LaTeX)</Label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            disabled={isUploadingImage || isSubmitting}
+                            onClick={() => imageInputRef.current?.click()}
+                          >
+                            {isUploadingImage ? "Mengunggah..." : "Sisipkan Gambar"}
+                          </Button>
+                          <input
+                            ref={imageInputRef}
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={handleImageUpload}
+                            disabled={isUploadingImage}
+                          />
+                        </div>
                         <Textarea
+                          ref={contentTextareaRef}
                           id="lesson-content"
                           rows={12}
                           value={form.content}
@@ -196,6 +255,7 @@ export default function AdminTopicLessonsPage() {
                           disabled={isSubmitting}
                           required
                         />
+                        {uploadError && <p className="text-xs text-destructive">{uploadError}</p>}
                       </div>
                       <div className="flex flex-col gap-2">
                         <Label>Preview</Label>

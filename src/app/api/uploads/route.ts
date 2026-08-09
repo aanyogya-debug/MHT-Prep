@@ -4,6 +4,7 @@ import { uploadImageBuffer } from "@/lib/cloudinary";
 
 const MAX_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const ALLOWED_FOLDERS = ["questions", "lessons"] as const;
 
 export async function POST(request: NextRequest) {
   const auth = requireRole(request, "ADMIN");
@@ -21,9 +22,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Ukuran file maksimal 8MB" }, { status: 400 });
   }
 
+  const folderParam = formData?.get("folder");
+  const folder = ALLOWED_FOLDERS.includes(folderParam as (typeof ALLOWED_FOLDERS)[number])
+    ? (folderParam as (typeof ALLOWED_FOLDERS)[number])
+    : "questions";
+
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
-    const result = await uploadImageBuffer(buffer, "mht-prep/questions");
+    const result = await uploadImageBuffer(buffer, `mht-prep/${folder}`);
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
     const isConfigError = err instanceof Error && err.message.includes("wajib di-set");

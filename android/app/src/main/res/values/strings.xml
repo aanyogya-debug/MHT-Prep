@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MHT Prep</string>
+    <string name="title_activity_main">MHT Prep</string>
+    <string name="package_name">com.mhtprep.app</string>
+    <string name="custom_url_scheme">com.mhtprep.app</string>
+</resources>

@@ -29,6 +29,7 @@ interface MasteryItem {
   topicId: string;
   topicName: string;
   subjectName: string;
+  difficulty: "EASY" | "MEDIUM" | "HARD";
   masteryScore: number;
   questionsAttempted: number;
   questionsCorrect: number;

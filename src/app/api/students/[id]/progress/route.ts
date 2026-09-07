@@ -37,6 +37,7 @@ export async function GET(
         topicId: m.topicId,
         topicName: m.topic.name,
         subjectName: m.topic.subject.name,
+        difficulty: m.difficulty,
         masteryScore: m.masteryScore,
         questionsAttempted: m.questionsAttempted,
         questionsCorrect: m.questionsCorrect,

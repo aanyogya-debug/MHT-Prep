@@ -10,12 +10,35 @@ export async function GET(request: NextRequest) {
   const subjectId = request.nextUrl.searchParams.get("subjectId") ?? undefined;
 
   try {
-    const topics = await db.topic.findMany({
-      where: subjectId ? { subjectId } : undefined,
-      orderBy: [{ subjectId: "asc" }, { orderIndex: "asc" }],
-      include: { _count: { select: { questions: true } } },
-    });
-    return NextResponse.json({ topics });
+    const [topics, difficultyCounts] = await Promise.all([
+      db.topic.findMany({
+        where: subjectId ? { subjectId } : undefined,
+        orderBy: [{ subjectId: "asc" }, { orderIndex: "asc" }],
+        include: { _count: { select: { questions: true } } },
+      }),
+      // Dipakai daftar subbab siswa (section "latihan bertingkat") utk
+      // menampilkan jumlah soal per level Mudah/Sedang/Sulit, bukan cuma
+      // total gabungan — satu query groupBy utk semua topik sekaligus.
+      db.question.groupBy({
+        by: ["topicId", "difficulty"],
+        where: subjectId ? { topic: { subjectId } } : undefined,
+        _count: true,
+      }),
+    ]);
+
+    const countsByTopic = new Map<string, { EASY: number; MEDIUM: number; HARD: number }>();
+    for (const row of difficultyCounts) {
+      const entry = countsByTopic.get(row.topicId) ?? { EASY: 0, MEDIUM: 0, HARD: 0 };
+      entry[row.difficulty] = row._count;
+      countsByTopic.set(row.topicId, entry);
+    }
+
+    const topicsWithCounts = topics.map((t) => ({
+      ...t,
+      questionCounts: countsByTopic.get(t.id) ?? { EASY: 0, MEDIUM: 0, HARD: 0 },
+    }));
+
+    return NextResponse.json({ topics: topicsWithCounts });
   } catch (err) {
     console.error("GET /api/topics failed:", err);
     return NextResponse.json({ error: "Terjadi kesalahan pada server" }, { status: 500 });

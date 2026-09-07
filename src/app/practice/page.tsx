@@ -18,27 +18,29 @@ import { apiFetch, ApiError } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-// Topik dari /api/topics kini ikut membawa _count.questions (section: rombak
-// navigasi) supaya daftar subbab bisa menampilkan jumlah soal tanpa query
-// terpisah per topik.
-interface TopicWithCount {
+type Difficulty = "EASY" | "MEDIUM" | "HARD";
+
+// Topik dari /api/topics kini ikut membawa questionCounts per tingkat
+// kesulitan (section "latihan bertingkat") supaya daftar subbab bisa
+// menampilkan & menavigasi 3 level Mudah/Sedang/Sulit secara terpisah.
+interface TopicWithCounts {
   id: string;
   subjectId: string;
   name: string;
   orderIndex: number;
-  _count: { questions: number };
+  questionCounts: Record<Difficulty, number>;
 }
 
 interface MasteryEntry {
   topicId: string;
+  difficulty: Difficulty;
   masteryScore: number;
   questionsAttempted: number;
 }
 
-// Jumlah soal per sesi latihan subbab sengaja dipatok kecil & tetap (bukan
-// dipilih siswa) — sesi latihan singkat yang bisa diulang berkali-kali,
-// bukan "kerjakan semua sekaligus". Mastery terakumulasi lintas percobaan.
-const SESSION_SIZE = 10;
+const DIFFICULTY_LABEL: Record<Difficulty, string> = { EASY: "Mudah", MEDIUM: "Sedang", HARD: "Sulit" };
+const DIFFICULTY_ORDER: Difficulty[] = ["EASY", "MEDIUM", "HARD"];
+const MINUTES_PER_QUESTION: Record<Difficulty, number> = { EASY: 1.5, MEDIUM: 2, HARD: 2.5 };
 
 const SUBJECT_ICON: Record<string, typeof Atom> = {
   Fisika: Atom,
@@ -56,18 +58,18 @@ function MasteryBadge({ entry }: { entry: MasteryEntry | undefined }) {
   if (score >= 80) {
     return (
       <Badge className="border-emerald-600/30 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400">
-        {score}% kuasai
+        {score}%
       </Badge>
     );
   }
   if (score >= 50) {
     return (
       <Badge className="border-amber-600/30 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
-        {score}% kuasai
+        {score}%
       </Badge>
     );
   }
-  return <Badge variant="destructive">{score}% kuasai</Badge>;
+  return <Badge variant="destructive">{score}%</Badge>;
 }
 
 export default function PracticePage() {
@@ -75,12 +77,13 @@ export default function PracticePage() {
   const router = useRouter();
 
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [topics, setTopics] = useState<TopicWithCount[]>([]);
+  const [topics, setTopics] = useState<TopicWithCounts[]>([]);
   const [mastery, setMastery] = useState<MasteryEntry[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [startingTopicId, setStartingTopicId] = useState<string | null>(null);
+  const [startingDifficulty, setStartingDifficulty] = useState<Difficulty | null>(null);
 
   useEffect(() => {
     if (!isReady) return;
@@ -88,7 +91,7 @@ export default function PracticePage() {
       try {
         const [subjectsRes, topicsRes, masteryRes] = await Promise.all([
           apiFetch<{ subjects: Subject[] }>("/api/subjects"),
-          apiFetch<{ topics: TopicWithCount[] }>("/api/topics"),
+          apiFetch<{ topics: TopicWithCounts[] }>("/api/topics"),
           apiFetch<{ mastery: MasteryEntry[] }>("/api/me/mastery"),
         ]);
         setSubjects(subjectsRes.subjects);
@@ -102,9 +105,9 @@ export default function PracticePage() {
     })();
   }, [isReady]);
 
-  const masteryByTopic = useMemo(() => {
+  const masteryByTopicDifficulty = useMemo(() => {
     const map = new Map<string, MasteryEntry>();
-    for (const m of mastery) map.set(m.topicId, m);
+    for (const m of mastery) map.set(`${m.topicId}|${m.difficulty}`, m);
     return map;
   }, [mastery]);
 
@@ -114,23 +117,20 @@ export default function PracticePage() {
   const topicsForSubject = topics
     .filter((t) => t.subjectId === selectedSubjectId)
     .sort((a, b) => a.orderIndex - b.orderIndex);
+  const selectedTopic = topics.find((t) => t.id === selectedTopicId) ?? null;
 
-  async function handleStartTopic(topicId: string, availableCount: number) {
+  async function handleStartDifficulty(topicId: string, difficulty: Difficulty) {
     setError(null);
-    setStartingTopicId(topicId);
+    setStartingDifficulty(difficulty);
     try {
       const { session } = await apiFetch<{ session: { id: string } }>("/api/sessions", {
         method: "POST",
-        body: JSON.stringify({
-          source: "topic",
-          topicId,
-          questionCount: Math.min(SESSION_SIZE, availableCount),
-        }),
+        body: JSON.stringify({ source: "topic", topicId, difficulty }),
       });
       router.push(`/sessions/${session.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Gagal memulai latihan");
-      setStartingTopicId(null);
+      setStartingDifficulty(null);
     }
   }
 
@@ -174,7 +174,7 @@ export default function PracticePage() {
               </div>
             )}
           </>
-        ) : (
+        ) : !selectedTopic ? (
           <>
             <button
               type="button"
@@ -186,7 +186,7 @@ export default function PracticePage() {
             </button>
             <h1 className="mb-1 text-xl font-semibold">{selectedSubject.name}</h1>
             <p className="mb-6 text-sm text-muted-foreground">
-              Tap subbab untuk langsung mulai latihan ({SESSION_SIZE} soal per sesi).
+              Tap subbab untuk memilih tingkat kesulitan (Mudah/Sedang/Sulit).
             </p>
 
             {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
@@ -197,14 +197,14 @@ export default function PracticePage() {
 
             <div className="flex flex-col gap-2">
               {topicsForSubject.map((topic) => {
-                const noQuestions = topic._count.questions === 0;
-                const isStarting = startingTopicId === topic.id;
+                const totalQuestions = DIFFICULTY_ORDER.reduce((sum, d) => sum + topic.questionCounts[d], 0);
+                const noQuestions = totalQuestions === 0;
                 return (
                   <button
                     key={topic.id}
                     type="button"
-                    disabled={noQuestions || isStarting}
-                    onClick={() => handleStartTopic(topic.id, topic._count.questions)}
+                    disabled={noQuestions}
+                    onClick={() => setSelectedTopicId(topic.id)}
                     className={cn(
                       "flex items-center gap-3 rounded-xl border bg-card p-4 text-left ring-1 ring-foreground/10 transition-all",
                       noQuestions
@@ -215,11 +215,66 @@ export default function PracticePage() {
                     <span className="flex-1">
                       <span className="block text-sm font-medium">{topic.name}</span>
                       <span className="block text-xs text-muted-foreground">
-                        {topic._count.questions} soal tersedia
+                        {totalQuestions} soal tersedia
                       </span>
                     </span>
-                    <MasteryBadge entry={masteryByTopic.get(topic.id)} />
                     <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => setSelectedTopicId(null)}
+              className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground hover:underline"
+            >
+              <ArrowLeft className="size-4" />
+              Kembali ke daftar subbab
+            </button>
+            <h1 className="mb-1 text-xl font-semibold">{selectedTopic.name}</h1>
+            <p className="mb-6 text-sm text-muted-foreground">
+              Pilih tingkat kesulitan — satu sesi berisi seluruh soal di level itu.
+            </p>
+
+            {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
+
+            <div className="flex flex-col gap-2">
+              {DIFFICULTY_ORDER.map((difficulty) => {
+                const count = selectedTopic.questionCounts[difficulty];
+                const noQuestions = count === 0;
+                const isStarting = startingDifficulty === difficulty;
+                const masteryEntry = masteryByTopicDifficulty.get(`${selectedTopic.id}|${difficulty}`);
+                const estimatedMinutes = Math.max(10, Math.round(count * MINUTES_PER_QUESTION[difficulty]));
+                return (
+                  <button
+                    key={difficulty}
+                    type="button"
+                    disabled={noQuestions || isStarting}
+                    onClick={() => handleStartDifficulty(selectedTopic.id, difficulty)}
+                    className={cn(
+                      "flex items-center gap-3 rounded-xl border bg-card p-4 text-left ring-1 ring-foreground/10 transition-all",
+                      noQuestions
+                        ? "cursor-not-allowed opacity-50"
+                        : "hover:-translate-y-0.5 hover:shadow-md hover:ring-primary/30",
+                    )}
+                  >
+                    <span className="flex-1">
+                      <span className="block text-sm font-medium">{DIFFICULTY_LABEL[difficulty]}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {noQuestions
+                          ? "Belum ada soal"
+                          : `${count} soal · ~${estimatedMinutes} menit`}
+                      </span>
+                    </span>
+                    {!noQuestions && <MasteryBadge entry={masteryEntry} />}
+                    {isStarting ? (
+                      <span className="text-xs text-muted-foreground">Memulai...</span>
+                    ) : (
+                      <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+                    )}
                   </button>
                 );
               })}

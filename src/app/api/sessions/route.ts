@@ -8,11 +8,24 @@ import { computeUnlockedStepIds } from "@/lib/learning-path";
 import { finalizeSession, isSessionExpired } from "@/lib/session-grading";
 import { sanitizeItemForActiveSession } from "@/lib/session-serializer";
 
-// Durasi latihan bebas/practice step sengaja tidak dispesifikkan brief —
-// formula sederhana 1.5 menit/soal, minimum 10 menit, dipilih sbg default
-// yang wajar sampai ada data nyata utk dikalibrasi ulang.
+// Durasi practice step / tryout lama: formula sederhana 1.5 menit/soal,
+// minimum 10 menit — dipertahankan apa adanya utk pathStep (section lama,
+// vestigial, tidak lagi dipakai siswa tapi API-nya dibiarkan jalan).
 function practiceDuration(questionCount: number): number {
   return Math.max(10, Math.round(questionCount * 1.5));
+}
+
+// Menit per soal per tingkat kesulitan (section "latihan bertingkat") —
+// makin sulit, makin banyak waktu berpikir yang wajar dialokasikan per soal.
+// Angka awal, mudah dikalibrasi ulang nanti kalau ada data pemakaian nyata.
+const MINUTES_PER_QUESTION: Record<"EASY" | "MEDIUM" | "HARD", number> = {
+  EASY: 1.5,
+  MEDIUM: 2,
+  HARD: 2.5,
+};
+
+function tieredPracticeDuration(questionCount: number, difficulty: "EASY" | "MEDIUM" | "HARD"): number {
+  return Math.max(10, Math.round(questionCount * MINUTES_PER_QUESTION[difficulty]));
 }
 
 export async function POST(request: NextRequest) {
@@ -39,7 +52,7 @@ export async function POST(request: NextRequest) {
         ? { pathStepId: input.pathStepId }
         : input.source === "tryout"
           ? { tryoutId: input.tryoutId }
-          : { topicId: input.topicId, pathStepId: null, tryoutId: null };
+          : { topicId: input.topicId, difficulty: input.difficulty, pathStepId: null, tryoutId: null };
 
     const existing = await db.exerciseSession.findFirst({
       where: { studentId, status: "IN_PROGRESS", ...dedupeWhere },
@@ -53,25 +66,30 @@ export async function POST(request: NextRequest) {
 
     let questionIds: string[];
     let topicId: string | null = null;
+    let difficulty: "EASY" | "MEDIUM" | "HARD" | null = null;
     let pathStepId: string | null = null;
     let tryoutId: string | null = null;
     let durationMinutes: number;
     let mode: "PRACTICE" | "SIMULATION";
 
     if (input.source === "topic") {
+      // Sesi latihan bertingkat: SELALU seluruh pool soal level ini, bukan
+      // jumlah yang diminta klien — supaya siswa benar-benar menuntaskan
+      // satu tingkat kesulitan sampai habis, bukan sampel sebagian.
       const pool = await db.question.findMany({
         where: { topicId: input.topicId, difficulty: input.difficulty },
         select: { id: true },
       });
-      if (pool.length < input.questionCount) {
+      if (pool.length === 0) {
         return NextResponse.json(
-          { error: `Soal tidak cukup: butuh ${input.questionCount}, tersedia ${pool.length}` },
+          { error: `Belum ada soal level ${input.difficulty} untuk topik ini` },
           { status: 409 },
         );
       }
-      questionIds = shuffle(pool, Math.random).slice(0, input.questionCount).map((q) => q.id);
+      questionIds = shuffle(pool, Math.random).map((q) => q.id);
       topicId = input.topicId;
-      durationMinutes = practiceDuration(input.questionCount);
+      difficulty = input.difficulty;
+      durationMinutes = tieredPracticeDuration(questionIds.length, input.difficulty);
       mode = "PRACTICE";
     } else if (input.source === "pathStep") {
       const pathStep = await db.pathStep.findUnique({ where: { id: input.pathStepId } });
@@ -145,6 +163,7 @@ export async function POST(request: NextRequest) {
         studentId,
         mode,
         topicId,
+        difficulty,
         pathStepId,
         tryoutId,
         totalQuestions: questionIds.length,

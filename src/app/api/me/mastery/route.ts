@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   try {
     const records = await db.masteryRecord.findMany({
       where: { studentId: auth.payload.sub },
-      select: { topicId: true, masteryScore: true, questionsAttempted: true },
+      select: { topicId: true, difficulty: true, masteryScore: true, questionsAttempted: true },
     });
     return NextResponse.json({ mastery: records });
   } catch (err) {

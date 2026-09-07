@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { Difficulty, Prisma } from "@prisma/client";
 import { gradeAnswer, summarizeSession, scoreToPercentage, type GradedAnswer } from "./scoring";
 import { hasPassedThreshold } from "./learning-path";
 import { markStepCompletedAndUnlockNext } from "./path-progress-service";
@@ -22,11 +22,16 @@ export async function finalizeSession(
 
   if (session.status !== "IN_PROGRESS") return;
 
-  const gradedItems: { itemId: string; topicId: string; graded: GradedAnswer }[] = [];
+  const gradedItems: { itemId: string; topicId: string; difficulty: Difficulty; graded: GradedAnswer }[] = [];
   for (const item of session.items) {
     const correctOption = item.question.options.find((o) => o.isCorrect);
     const graded = gradeAnswer(item.selectedOptionId, correctOption?.id ?? "");
-    gradedItems.push({ itemId: item.id, topicId: item.question.topicId, graded });
+    gradedItems.push({
+      itemId: item.id,
+      topicId: item.question.topicId,
+      difficulty: item.question.difficulty,
+      graded,
+    });
   }
 
   const summary = summarizeSession(gradedItems.map((g) => g.graded));
@@ -69,30 +74,34 @@ export async function finalizeSession(
 async function updateMasteryRecords(
   tx: Prisma.TransactionClient,
   studentId: string,
-  gradedItems: { topicId: string; graded: GradedAnswer }[],
+  gradedItems: { topicId: string; difficulty: Difficulty; graded: GradedAnswer }[],
 ): Promise<void> {
-  const byTopic = new Map<string, { attempted: number; correct: number }>();
-  for (const { topicId, graded } of gradedItems) {
+  // Dipecah per (topicId, difficulty) sejak section "latihan bertingkat" —
+  // sesi latihan kini selalu satu tingkat kesulitan per subbab, jadi mastery
+  // yang tersimpan pun mengikuti granularitas itu (Mudah/Sedang/Sulit terpisah).
+  const byTopicDifficulty = new Map<string, { topicId: string; difficulty: Difficulty; attempted: number; correct: number }>();
+  for (const { topicId, difficulty, graded } of gradedItems) {
     if (graded.isCorrect === null) continue; // tidak dijawab -> bukan "attempted"
-    const entry = byTopic.get(topicId) ?? { attempted: 0, correct: 0 };
+    const key = `${topicId}|${difficulty}`;
+    const entry = byTopicDifficulty.get(key) ?? { topicId, difficulty, attempted: 0, correct: 0 };
     entry.attempted += 1;
     if (graded.isCorrect) entry.correct += 1;
-    byTopic.set(topicId, entry);
+    byTopicDifficulty.set(key, entry);
   }
 
-  for (const [topicId, delta] of byTopic) {
+  for (const { topicId, difficulty, ...delta } of byTopicDifficulty.values()) {
     const existing = await tx.masteryRecord.findUnique({
-      where: { studentId_topicId: { studentId, topicId } },
+      where: { studentId_topicId_difficulty: { studentId, topicId, difficulty } },
     });
     const questionsAttempted = (existing?.questionsAttempted ?? 0) + delta.attempted;
     const questionsCorrect = (existing?.questionsCorrect ?? 0) + delta.correct;
     // Formula sengaja sederhana (tidak dispesifikkan di brief): akurasi
-    // kumulatif seluruh soal topik ini yang pernah dikerjakan siswa.
+    // kumulatif seluruh soal topik+level ini yang pernah dikerjakan siswa.
     const masteryScore = (questionsCorrect / questionsAttempted) * 100;
 
     await tx.masteryRecord.upsert({
-      where: { studentId_topicId: { studentId, topicId } },
-      create: { studentId, topicId, questionsAttempted, questionsCorrect, masteryScore },
+      where: { studentId_topicId_difficulty: { studentId, topicId, difficulty } },
+      create: { studentId, topicId, difficulty, questionsAttempted, questionsCorrect, masteryScore },
       update: { questionsAttempted, questionsCorrect, masteryScore },
     });
   }

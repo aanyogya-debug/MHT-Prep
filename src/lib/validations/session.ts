@@ -9,8 +9,10 @@ export const startSessionSchema = z.discriminatedUnion("source", [
   z.object({
     source: z.literal("topic"),
     topicId: z.string().min(1, "Topik wajib dipilih"),
-    questionCount: z.number().int().min(1).max(100),
-    difficulty: z.enum(DIFFICULTIES).optional(),
+    // Wajib sejak "latihan bertingkat": satu sesi = satu tingkat kesulitan,
+    // selalu berisi SELURUH pool soal level itu (bukan jumlah pilihan siswa)
+    // — lihat perhitungan questionCount di route.ts, bukan dari input klien.
+    difficulty: z.enum(DIFFICULTIES),
   }),
   z.object({
     source: z.literal("pathStep"),

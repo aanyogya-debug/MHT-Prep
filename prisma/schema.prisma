@@ -344,6 +344,11 @@ model ExerciseSession {
   topicId String?
   topic   Topic?  @relation(fields: [topicId], references: [id], onDelete: SetNull)
 
+  // Diisi hanya utk sesi "latihan bertingkat" (source topic) — satu sesi
+  // selalu satu tingkat kesulitan sejak section itu. Null utk pathStep/tryout
+  // lama (soal campuran berbagai level).
+  difficulty Difficulty?
+
   pathStepId String?
   pathStep   PathStep? @relation(fields: [pathStepId], references: [id], onDelete: SetNull)
 
@@ -399,17 +404,22 @@ model ExerciseSessionItem {
 // Mastery per topik (v0.2.0, tetap dipakai apa adanya).
 // ---------------------------------------------------------------------------
 
+// Dipecah per (studentId, topicId, difficulty) sejak section "latihan bertingkat"
+// (mudah/sedang/sulit per subbab) — sebelumnya satu angka gabungan per topik,
+// sekarang tiap tingkat kesulitan punya skor sendiri supaya bisa memantau
+// "sudah kuasai Mudah 100%, tapi Sulit baru 30%" per subbab.
 model MasteryRecord {
-  id                 String   @id @default(cuid())
+  id                 String     @id @default(cuid())
   studentId          String
-  student            User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student            User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
   topicId            String
-  topic              Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  masteryScore       Float    @default(0) // 0-100
-  questionsAttempted Int      @default(0)
-  questionsCorrect   Int      @default(0)
-  updatedAt          DateTime @updatedAt
+  topic              Topic      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  difficulty         Difficulty
+  masteryScore       Float      @default(0) // 0-100
+  questionsAttempted Int        @default(0)
+  questionsCorrect   Int        @default(0)
+  updatedAt          DateTime   @updatedAt
 
-  @@unique([studentId, topicId])
+  @@unique([studentId, topicId, difficulty])
   @@map("mastery_records")
 }

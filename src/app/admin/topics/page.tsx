@@ -227,23 +227,9 @@ export default function AdminTopicsPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            render={<Link href={`/admin/topics/${topic.id}/lessons`} />}
-                          >
-                            Materi
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
                             render={<Link href={`/admin/topics/${topic.id}/questions`} />}
                           >
                             Soal
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            render={<Link href={`/admin/topics/${topic.id}/path`} />}
-                          >
-                            Path
                           </Button>
                           <Button variant="outline" size="sm" onClick={() => openEditDialog(topic)}>
                             Edit

@@ -9,6 +9,7 @@ import {
   Atom,
   BookOpenText,
   Calculator,
+  Leaf,
   Sparkles,
 } from "lucide-react";
 import { Navbar } from "@/components/navbar";
@@ -40,7 +41,8 @@ interface MasteryEntry {
 const SESSION_SIZE = 10;
 
 const SUBJECT_ICON: Record<string, typeof Atom> = {
-  "Penalaran IPA": Atom,
+  Fisika: Atom,
+  Biologi: Leaf,
   "Penalaran Matematika": Calculator,
   "Literasi Bahasa Inggris": BookOpenText,
   "Tes Potensial Skolastik": Sparkles,

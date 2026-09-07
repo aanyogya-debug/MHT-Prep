@@ -38,6 +38,7 @@ interface ResultItem {
   pointsEarned: number | null;
   question: {
     id: string;
+    difficulty: "EASY" | "MEDIUM" | "HARD";
     questionText: string;
     explanation: string | null;
     options: ResultOption[];
@@ -83,6 +84,18 @@ export default function SessionResultsPage() {
 
   const sortedItems = [...session.items].sort((a, b) => a.orderIndex - b.orderIndex);
 
+  // Analisis ringan per tingkat kesulitan (section: sedikit analisis) —
+  // dihitung langsung dari items yang sudah ada, tidak perlu endpoint baru.
+  const DIFFICULTY_LABEL: Record<string, string> = { EASY: "Mudah", MEDIUM: "Sedang", HARD: "Sulit" };
+  const byDifficulty = (["EASY", "MEDIUM", "HARD"] as const).map((diff) => {
+    const items = sortedItems.filter((it) => it.question.difficulty === diff);
+    const correct = items.filter((it) => it.isCorrect === true).length;
+    return { diff, label: DIFFICULTY_LABEL[diff], correct, total: items.length };
+  }).filter((d) => d.total > 0);
+  const weakest = [...byDifficulty]
+    .filter((d) => d.correct < d.total)
+    .sort((a, b) => a.correct / a.total - b.correct / b.total)[0];
+
   return (
     <main className="min-h-screen bg-muted/30 p-4 sm:p-6">
       <div className="mx-auto w-full max-w-2xl">
@@ -127,6 +140,46 @@ export default function SessionResultsPage() {
             )}
           </CardContent>
         </Card>
+
+        {byDifficulty.length > 0 && (
+          <Card className="mb-6 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">Analisis Singkat</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-3">
+                {byDifficulty.map((d) => {
+                  const pct = Math.round((d.correct / d.total) * 100);
+                  return (
+                    <div key={d.diff}>
+                      <div className="mb-1 flex items-center justify-between text-xs">
+                        <span className="font-medium">{d.label}</span>
+                        <span className="text-muted-foreground">
+                          {d.correct}/{d.total} benar
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={cn(
+                            "h-full rounded-full",
+                            pct >= 80 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-500" : "bg-destructive",
+                          )}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {weakest && (
+                <p className="mt-4 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+                  Soal tingkat <span className="font-medium text-foreground">{weakest.label}</span> paling
+                  banyak salah — coba ulangi subbab ini untuk memperkuat bagian itu.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <div className="flex flex-col gap-6">
           {sortedItems.map((item, index) => {

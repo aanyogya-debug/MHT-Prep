@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ComponentType } from "react";
-import { Users, BookOpen, ClipboardList, Upload, Route, Dumbbell, Timer, ArrowRight } from "lucide-react";
+import { Users, BookOpen, ClipboardList, Upload, Dumbbell, Timer, ArrowRight } from "lucide-react";
 import { Navbar } from "@/components/navbar";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 
@@ -42,15 +42,9 @@ const ADMIN_CARDS: ActionCard[] = [
 
 const STUDENT_CARDS: ActionCard[] = [
   {
-    href: "/path",
-    title: "Learning Path",
-    description: "Materi & latihan berjenjang per topik",
-    icon: Route,
-  },
-  {
     href: "/practice",
-    title: "Latihan Bebas",
-    description: "Pilih topik dan jumlah soal sendiri",
+    title: "Latihan per Subbab",
+    description: "Kerjakan soal per subbab, langsung dengan pembahasan",
     icon: Dumbbell,
   },
   {

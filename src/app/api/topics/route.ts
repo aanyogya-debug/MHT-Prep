@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     const topics = await db.topic.findMany({
       where: subjectId ? { subjectId } : undefined,
       orderBy: [{ subjectId: "asc" }, { orderIndex: "asc" }],
+      include: { _count: { select: { questions: true } } },
     });
     return NextResponse.json({ topics });
   } catch (err) {

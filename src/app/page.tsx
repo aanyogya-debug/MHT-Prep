@@ -16,14 +16,14 @@ interface ActionCard {
 const ADMIN_CARDS: ActionCard[] = [
   {
     href: "/admin/students",
-    title: "Progres Siswa",
-    description: "Pantau skor, mastery, dan riwayat latihan",
+    title: "Kelola Siswa",
+    description: "Tambah siswa baru, pantau skor & mastery, reset progres",
     icon: Users,
   },
   {
     href: "/admin/topics",
     title: "Kelola Topik",
-    description: "Materi, soal, dan learning path per topik",
+    description: "Kelola subbab dan bank soal per mata pelajaran",
     icon: BookOpen,
   },
   {

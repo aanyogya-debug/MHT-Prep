@@ -9,6 +9,7 @@ import { apiFetch, ApiError } from "@/lib/api-client";
 import { MasteryBars } from "@/components/mastery-bars";
 import { ScoreTrendChart } from "@/components/score-trend-chart";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -66,6 +67,8 @@ export default function AdminStudentProgressPage() {
   const [data, setData] = useState<ProgressData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isReady) return;
@@ -84,6 +87,26 @@ export default function AdminStudentProgressPage() {
   }, [isReady, id]);
 
   if (!isReady || !user) return null;
+
+  async function handleReset() {
+    if (!data) return;
+    const confirmed = confirm(
+      `Reset seluruh progres ${data.student.name}? Semua riwayat sesi latihan/tryout dan skor mastery akan dihapus permanen. Akun (nama, email, password) tetap ada — siswa mulai dari nol lagi.`,
+    );
+    if (!confirmed) return;
+
+    setResetError(null);
+    setIsResetting(true);
+    try {
+      await apiFetch(`/api/students/${id}/reset`, { method: "POST" });
+      const result = await apiFetch<ProgressData>(`/api/students/${id}/progress`);
+      setData(result);
+    } catch (err) {
+      setResetError(err instanceof ApiError ? err.message : "Gagal mereset progres");
+    } finally {
+      setIsResetting(false);
+    }
+  }
 
   const trendPoints = data
     ? data.sessions
@@ -109,9 +132,21 @@ export default function AdminStudentProgressPage() {
 
         {!loading && !loadError && data && (
           <>
-            <h1 className="mt-2 mb-6 text-xl font-semibold">
-              Progres — {data.student.name}
-            </h1>
+            <div className="mt-2 mb-6 flex items-center justify-between gap-3">
+              <div>
+                <h1 className="text-xl font-semibold">Progres — {data.student.name}</h1>
+                <p className="text-sm text-muted-foreground">{data.student.email}</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleReset}
+                disabled={isResetting}
+              >
+                {isResetting ? "Mereset..." : "Reset Progres"}
+              </Button>
+            </div>
+            {resetError && <p className="mb-4 text-sm text-destructive">{resetError}</p>}
 
             <Card className="mb-6">
               <CardHeader>

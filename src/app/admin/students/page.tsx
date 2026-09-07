@@ -46,6 +46,15 @@ export default function AdminStudentsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Dialog ganti password terpisah dari "Tambah Siswa" — dipakai saat siswa
+  // lupa password. Password lama tidak pernah bisa ditampilkan (tersimpan
+  // sbg hash satu-arah), jadi satu-satunya cara "kasih tau siswa" adalah
+  // admin set password baru lalu memberitahukannya langsung.
+  const [passwordDialogStudent, setPasswordDialogStudent] = useState<Student | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+
   useEffect(() => {
     if (!isReady) return;
     (async () => {
@@ -70,6 +79,30 @@ export default function AdminStudentsPage() {
     setPassword("");
     setFormError(null);
     setDialogOpen(true);
+  }
+
+  function openPasswordDialog(student: Student) {
+    setPasswordDialogStudent(student);
+    setNewPassword("");
+    setPasswordError(null);
+  }
+
+  async function handleChangePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!passwordDialogStudent) return;
+    setPasswordError(null);
+    setIsSavingPassword(true);
+    try {
+      await apiFetch(`/api/students/${passwordDialogStudent.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ password: newPassword }),
+      });
+      setPasswordDialogStudent(null);
+    } catch (err) {
+      setPasswordError(err instanceof ApiError ? err.message : "Gagal mengubah password");
+    } finally {
+      setIsSavingPassword(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -179,7 +212,7 @@ export default function AdminStudentsPage() {
                   <TableRow key={student.id}>
                     <TableCell>{student.name}</TableCell>
                     <TableCell>{student.email}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="flex justify-end gap-2">
                       <Button
                         variant="outline"
                         size="sm"
@@ -187,11 +220,49 @@ export default function AdminStudentsPage() {
                       >
                         Lihat Progres
                       </Button>
+                      <Button variant="outline" size="sm" onClick={() => openPasswordDialog(student)}>
+                        Ubah Password
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+
+            <Dialog
+              open={passwordDialogStudent !== null}
+              onOpenChange={(open) => !open && setPasswordDialogStudent(null)}
+            >
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Ubah Password — {passwordDialogStudent?.name}</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleChangePassword} className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="new-password">Password baru</Label>
+                    <Input
+                      id="new-password"
+                      type="text"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      disabled={isSavingPassword}
+                      required
+                      minLength={8}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Password lama tidak bisa ditampilkan (tersimpan sebagai hash). Set yang baru
+                      di sini, lalu beri tahu siswa secara langsung.
+                    </p>
+                  </div>
+                  {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
+                  <DialogFooter>
+                    <Button type="submit" disabled={isSavingPassword}>
+                      {isSavingPassword ? "Menyimpan..." : "Simpan"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
           </>
         )}
       </main>
